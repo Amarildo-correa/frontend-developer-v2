@@ -2,9 +2,8 @@ import { test, expect } from "@playwright/test";
 
 // Servido por HTTP (ver webServer no playwright.config.cjs) para que o sprite
 // externo `<use href>` resolva — sob file:// os ícones ficam em branco.
-const APP_URL = "/public/index.html";
-const SHOTS =
-    "C:\\Users\\amari\\AppData\\Local\\Temp\\claude\\c--projetos-repositorys-root-frontend-developer\\05f26511-156c-492c-81fd-4948c5733358\\scratchpad";
+const APP_URL = "/index.html";
+const SHOTS = "test-results/screenshots";
 
 test.beforeEach(async ({ page }) => {
     await page.goto(APP_URL);

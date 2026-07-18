@@ -82,6 +82,19 @@
 
     --icon-size: 1.375rem;
     --duration-base: 0.2s;
+
+    /* Safe areas (notch/Dynamic Island/home indicator no iOS; edge-to-edge no
+       Chrome Android) — resolvem para 0px em telas sem essas áreas, então não
+       afetam o layout padrão. Fallback 0px explícito: env() com var. inválida
+       (navegador sem suporte) cai nesse valor em vez de invalidar a regra. */
+    --safe-area-top: env(safe-area-inset-top, 0px);
+    --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-area-left: env(safe-area-inset-left, 0px);
+    --safe-area-right: env(safe-area-inset-right, 0px);
+
+    /* Camada do header/rodapé "grudentos" (position: sticky) acima do
+       conteúdo que rola por baixo. */
+    --z-sticky: 10;
 }
 
 /* ------------------------------------------------------------ Reset base -- */
@@ -122,10 +135,10 @@ body {
     /* Áreas seguras (notch/Dynamic Island/home indicator, iOS com
        viewport-fit=cover): resolvem para 0px em dispositivos sem essas áreas,
        então não afetam o layout padrão. */
-    padding-top: env(safe-area-inset-top);
-    padding-bottom: env(safe-area-inset-bottom);
-    padding-left: env(safe-area-inset-left);
-    padding-right: env(safe-area-inset-right);
+    padding-top: var(--safe-area-top);
+    padding-bottom: var(--safe-area-bottom);
+    padding-left: var(--safe-area-left);
+    padding-right: var(--safe-area-right);
 }
 
 /* Wrappers semânticos (R2): saem da árvore de layout via display:contents —
@@ -140,8 +153,20 @@ body {
 }
 
 /* Linha 1: LOGO | título | menu. (Bordas: ver bloco consolidado no fim.) */
+/* "sticky", não "fixed": .header é display:contents (R2), então position só
+   tem efeito nos FILHOS (itens reais do grid). Sticky mantém a célula no
+   fluxo do grid (não precisa de padding de compensação em nenhum outro
+   elemento — ao contrário de "fixed", que exigiria tirar o header do grid
+   único e violaria R1/R3) e só "gruda" no topo ao rolar. O offset usa
+   --safe-area-top para não colar embaixo do notch/Dynamic Island. */
 .header > * {
     grid-row: 1;
+    position: sticky;
+    top: var(--safe-area-top);
+    z-index: var(--z-sticky);
+    /* background: ver bloco consolidado no fim do arquivo — declarado lá
+       (não aqui) porque `.btn { background: none }` vem depois no cascade e,
+       na mesma especificidade, venceria esta regra. */
 }
 
 /* Linha 2: avatar | nome | tempo. (align-items padrão do grid já é stretch —
@@ -150,9 +175,16 @@ body {
     grid-row: 2;
 }
 
-/* Linha 5: 6 botões do rodapé. */
+/* Linha 5: 6 botões do rodapé. Mesma lógica de "sticky" do header (ver
+   comentário acima): fica grudado no fundo da viewport, respeitando a área
+   segura inferior (home indicator no iOS), sem sair do grid único. */
 .bottom-nav > * {
     grid-row: 5;
+    position: sticky;
+    bottom: var(--safe-area-bottom);
+    z-index: var(--z-sticky);
+    /* background: ver bloco consolidado no fim do arquivo — mesmo motivo do
+       .header > * (perde para `.nav-btn { background: none }` no cascade). */
 }
 
 /* --------------------------------------------------------- Célula quadrada */
@@ -352,6 +384,23 @@ body {
     border-bottom: var(--hair) solid var(--color-line);
 }
 
+/* header/nav do mosaico "grudam" nas bordas da viewport ao rolar, mesma
+   lógica sticky do index.html (ver comentário em .header > *). O seletor de
+   descendente funciona porque display:contents só afeta a árvore de caixas
+   renderizadas, não a árvore do DOM usada pelos combinadores CSS. */
+header.mosaic-region > .mosaic-cell {
+    position: sticky;
+    top: var(--safe-area-top);
+    z-index: var(--z-sticky);
+    background: var(--color-bg);
+}
+nav.mosaic-region > .mosaic-cell {
+    position: sticky;
+    bottom: var(--safe-area-bottom);
+    z-index: var(--z-sticky);
+    background: var(--color-bg);
+}
+
 /* ============================================================================
    BORDAS DE LINHA E PERÍMETRO (R4) — bloco consolidado, DELIBERADAMENTE no
    fim do arquivo: na mesma especificidade, o cascade garante que estas regras
@@ -406,4 +455,14 @@ body {
 .post-title,
 .post-body {
     border-right: var(--hair) solid var(--color-line);
+}
+
+/* Fundo do header/rodapé sticky (R5: único background é --color-bg) — igual
+   às bordas acima, declarado aqui de propósito: `.btn`/`.nav-btn` definem
+   `background: none` (reset do componente) mais acima no arquivo, na mesma
+   especificidade; sem o conteúdo rolando por baixo aparece através do botão
+   enquanto a barra está "grudada" no topo/fundo da tela. */
+.header > *,
+.bottom-nav > * {
+    background: var(--color-bg);
 }
