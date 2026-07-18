@@ -119,6 +119,13 @@ body {
        células de extremidade (ver bloco "BORDAS DE LINHA E PERÍMETRO" no fim
        deste arquivo) — assim as linhas da grade encostam nas extremidades da
        tela, sem moldura deslocando as células para dentro. */
+    /* Áreas seguras (notch/Dynamic Island/home indicator, iOS com
+       viewport-fit=cover): resolvem para 0px em dispositivos sem essas áreas,
+       então não afetam o layout padrão. */
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
 }
 
 /* Wrappers semânticos (R2): saem da árvore de layout via display:contents —
