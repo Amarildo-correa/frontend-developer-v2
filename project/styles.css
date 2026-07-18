@@ -1,0 +1,402 @@
+/* ============================================================================
+   DESIGN SYSTEM — MOSAICO
+   Documentação completa (com exemplos de HTML): DESIGN.md → "Arquitetura do
+   grid mosaico". Abaixo, o CONTRATO que toda nova feature DEVE seguir.
+
+   REGRAS INEGOCIÁVEIS (violação = layout desalinhado; validar com Playwright):
+
+   R1. GRID ÚNICO — existe UM só grid na página: `.app`, com 6 colunas
+       (`repeat(6, minmax(var(--module-min), 1fr))`). NUNCA criar um grid
+       aninhado com colunas próprias para uma seção — grids paralelos
+       arredondam subpixels de forma independente e desalinham as bordas
+       (defeito real, medido nesta base; ver DESIGN.md).
+
+   R2. SEÇÃO = `display: contents` — todo wrapper semântico (<header>, <main>,
+       <nav>, <section>…) recebe `display: contents` e seus FILHOS viram itens
+       diretos do grid de .app. Filho posiciona-se com `grid-row` e ocupa
+       colunas com `grid-column: span N` (default: 1 coluna).
+
+   R3. BLOCO ATÔMICO = QUADRADO — todo elemento de 1 módulo (ícone, avatar,
+       logo, botão) usa `aspect-ratio: 1 / 1` e NENHUMA width/height própria:
+       a altura da linha deriva da largura real da coluna. NUNCA fixar altura
+       de linha com --row/px/vw — fórmulas paralelas divergem do 1fr do grid.
+
+   R4. POSSE DA BORDA — cada aresta é desenhada por UM único elemento:
+       • divisória vertical  → o elemento à ESQUERDA declara border-right;
+       • divisória horizontal → o elemento ACIMA declara border-bottom;
+       • o vizinho NUNCA redeclara (nem border-left, nem border-top);
+       • PERÍMETRO: o .app NÃO tem moldura própria — cada célula de
+         extremidade fecha a própria aresta externa (1ª linha: border-top;
+         1ª coluna: border-left; última coluna: border-right; última linha:
+         border-bottom). Ver bloco "BORDAS DE LINHA E PERÍMETRO" no fim.
+
+   R5. SEPARAÇÃO SÓ POR BORDA — sem gap, sem --color-surface, sem shadow,
+       sem border-radius, sem gradient (ver DESIGN.md → Cores e superfícies).
+       Todo background é --color-bg.
+
+   R6. CONTEÚDO VARIÁVEL (texto que cresce: título, descrição, listas) ocupa
+       a linha inteira (`grid-column: 1 / -1`), altura mínima de 1 módulo
+       (`min-height: var(--row)`) e cresce livremente com padding.
+
+   R7. VALIDAR ANTES DE RESPONDER — `npm run test:e2e` (specs em tests/e2e/;
+       mosaic.spec.js trava quadrados, alinhamento e módulos idênticos).
+   ========================================================================== */
+
+:root {
+    --font-base: "Inter", system-ui, sans-serif;
+
+    /* Cores (único background em toda a aplicação: --color-bg) */
+    --color-bg: #0d1420;
+    --color-line: #2a3b59;
+    --color-text: #dfe7f2;
+    --color-text-muted: #94a3ba;
+    --color-accent: #7aa6e8;
+
+    /* Espessura única de linha da grade (--hair). --hair-edge fica reservado
+       para destaques futuros — o perímetro NÃO usa mais espessura própria:
+       é desenhado pelas células de extremidade, com --hair. */
+    --hair: max(1px, 0.0625rem);
+    --hair-edge: max(2px, 0.0625rem);
+
+    /* Mínimo do módulo = alvo de toque WCAG 2.1 SC 2.5.5 (44px) — usado no
+       minmax() do grid de 6 colunas, a única fonte de tamanho de módulo. */
+    --module-min: 2.75rem; /* 44px */
+    --app-max-width: 26.875rem; /* 430px */
+
+    /* Referência aproximada de "1 módulo" para altura MÍNIMA de conteúdo
+       variável (title/body) — não crítica para alinhamento (não é usada por
+       nenhuma célula quadrada, que deriva seu tamanho só do grid). */
+    --row: clamp(var(--module-min), 16.6667vw, 4.4792rem);
+    --pad: clamp(0.875rem, 4.5vw, 1.125rem);
+
+    --font-size-sm: 0.8125rem;
+    --font-size-base: 1rem;
+    --font-size-lg: 1.125rem;
+    --font-size-xl: 1.375rem;
+    --font-weight-regular: 400;
+    --font-weight-semibold: 600;
+    --font-weight-bold: 800;
+    --line-height-base: 1.45;
+    --line-height-relaxed: 1.6;
+    --letter-spacing-md: 0.05em;
+
+    --icon-size: 1.375rem;
+    --duration-base: 0.2s;
+}
+
+/* ------------------------------------------------------------ Reset base -- */
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    -webkit-tap-highlight-color: transparent;
+}
+
+body {
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-family: var(--font-base);
+    font-size: var(--font-size-base);
+    line-height: var(--line-height-base);
+    min-height: 100dvh;
+    overflow-x: hidden;
+}
+
+/* ============================================================================
+   App shell — UM grid de 6 colunas para a página inteira. Moldura em forma
+   de cartão, centralizada; não se estica em telas largas.
+   ========================================================================== */
+.app {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(var(--module-min), 1fr));
+    grid-template-rows: auto auto auto 1fr auto;
+    max-width: var(--app-max-width);
+    margin-inline: auto;
+    min-height: 100dvh;
+    /* SEM border no .app (regra do DS): o perímetro é desenhado pelas próprias
+       células de extremidade (ver bloco "BORDAS DE LINHA E PERÍMETRO" no fim
+       deste arquivo) — assim as linhas da grade encostam nas extremidades da
+       tela, sem moldura deslocando as células para dentro. */
+}
+
+/* Wrappers semânticos (R2): saem da árvore de layout via display:contents —
+   seus filhos participam diretamente do grid de .app, garantindo alinhamento
+   com qualquer outra seção. AO CRIAR UMA NOVA SEÇÃO: adicionar a classe dela
+   a esta lista (ou usar .mosaic-region) e posicionar os filhos por grid-row. */
+.header,
+.post-header,
+.feed,
+.bottom-nav {
+    display: contents;
+}
+
+/* Linha 1: LOGO | título | menu. (Bordas: ver bloco consolidado no fim.) */
+.header > * {
+    grid-row: 1;
+}
+
+/* Linha 2: avatar | nome | tempo. (align-items padrão do grid já é stretch —
+   cada célula preenche a altura da linha, definida pelas células quadradas.) */
+.post-header > * {
+    grid-row: 2;
+}
+
+/* Linha 5: 6 botões do rodapé. */
+.bottom-nav > * {
+    grid-row: 5;
+}
+
+/* --------------------------------------------------------- Célula quadrada */
+/* Todo elemento atômico (um único elemento/bloco: ícone, avatar, logo) ocupa
+   exatamente 1 coluna do grid de 6 e usa aspect-ratio para garantir altura
+   == largura da própria coluna — nenhuma dimensão fixa própria, então não
+   há como divergir do restante do grid. */
+.icon-cell {
+    display: grid;
+    place-items: center;
+    aspect-ratio: 1 / 1;
+}
+
+.icon {
+    width: var(--icon-size);
+    height: var(--icon-size);
+    fill: currentColor;
+    color: var(--color-accent);
+    flex: none;
+}
+
+.btn {
+    display: grid;
+    place-items: center;
+    aspect-ratio: 1 / 1;
+    background: none;
+    border: none;
+    color: var(--color-accent);
+    cursor: pointer;
+    transition: background var(--duration-base);
+}
+.btn:hover,
+.btn:focus-visible {
+    background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+    outline: none;
+}
+
+/* ============================================================================
+   Header — logo (1 col) | título (4 col) | menu (1 col) = 6 colunas.
+   ========================================================================== */
+.brand {
+    font-weight: var(--font-weight-bold);
+    letter-spacing: var(--letter-spacing-md);
+    font-size: 0.625rem;
+    color: var(--color-accent);
+    border-right: var(--hair) solid var(--color-line);
+}
+
+/* Logo (folder): ocupa toda a célula, ignorando o --icon-size padrão. */
+.brand .icon {
+    width: 100%;
+    height: 100%;
+}
+
+.header-title {
+    grid-column: span 4;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding-inline: var(--pad);
+    font-weight: var(--font-weight-semibold);
+    font-size: var(--font-size-lg);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    border-right: var(--hair) solid var(--color-line);
+}
+
+/* ============================================================================
+   Post header — avatar (1 col) | nome (4 col) | tempo (1 col) = 6 colunas.
+   ========================================================================== */
+.post-avatar {
+    display: grid;
+    place-items: center;
+    aspect-ratio: 1 / 1;
+    border-right: var(--hair) solid var(--color-line);
+}
+
+/* Avatar: quadrado (não círculo — ver DESIGN.md, sem border-radius). Sem
+   borda própria: já está dentro de .post-avatar, que já declara a separação
+   (border-right) — um bloco não redeclara a borda de quem já o contém. */
+.avatar-md {
+    width: 60%;
+    aspect-ratio: 1 / 1;
+    display: grid;
+    place-items: center;
+    font-weight: var(--font-weight-bold);
+    font-size: var(--font-size-lg);
+    color: var(--color-accent);
+}
+
+.post-meta {
+    grid-column: span 4;
+    display: flex;
+    align-items: center;
+    padding-inline: var(--pad);
+    min-width: 0;
+    /* O elemento à esquerda da divisória declara a borda (mesma convenção de
+       .header-title); .post-time não redeclara com border-left. */
+    border-right: var(--hair) solid var(--color-line);
+}
+.post-name {
+    font-weight: var(--font-weight-semibold);
+    font-size: var(--font-size-base);
+    color: var(--color-text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Ícone de relógio, não mais texto ("1h") — cor herdada do .icon padrão
+   (--color-accent), consistente com os demais ícones do sistema. */
+.post-time {
+    display: grid;
+    place-items: center;
+    aspect-ratio: 1 / 1;
+}
+
+/* ============================================================================
+   Feed / post — conteúdo variável, flui livremente com padding (altura
+   mínima de 1 módulo, sem exigir múltiplos inteiros). Linhas 3 e 4 do grid
+   de .app; .post-body é 1fr (empurra o rodapé para o fim da viewport).
+   ========================================================================== */
+.post-title {
+    grid-row: 3;
+    grid-column: 1 / -1;
+    min-height: var(--row);
+    display: flex;
+    align-items: center;
+    padding: var(--pad);
+    font-size: var(--font-size-xl);
+    font-weight: var(--font-weight-bold);
+    /* bordas: bloco consolidado "BORDAS DE LINHA E PERÍMETRO" no fim. */
+}
+
+.post-body {
+    grid-row: 4;
+    grid-column: 1 / -1;
+    padding: var(--pad);
+    color: var(--color-text-muted);
+    line-height: var(--line-height-relaxed);
+}
+.post-body p + p {
+    margin-top: 1em;
+}
+
+/* ============================================================================
+   Bottom nav — 6 botões, cada um ocupando 1 das 6 colunas do grid único.
+   ========================================================================== */
+.nav-btn {
+    display: grid;
+    place-items: center;
+    aspect-ratio: 1 / 1;
+    background: none;
+    border: none;
+    color: var(--color-accent);
+    cursor: pointer;
+    /* border-right em TODOS (incl. o último): sem moldura no .app, a célula
+       da última coluna fecha a própria aresta direita (extremidade da tela). */
+    border-right: var(--hair) solid var(--color-line);
+    transition: background var(--duration-base);
+}
+.nav-btn:hover,
+.nav-btn:focus-visible {
+    background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+    outline: none;
+}
+
+/* ============================================================================
+   Mosaico de teste (mosaico.html) — grade cheia de células quadradas para
+   verificar o alinhamento das bordas ao longo de muitas linhas/colunas.
+   Reutiliza o MESMO grid de 6 colunas de .app; só troca as linhas fixas do
+   post por linhas implícitas automáticas (uma por fileira de blocos).
+   `.app--mosaic`, `.mosaic-region` e `.mosaic-cell` também servem de MODELO
+   GENÉRICO para novas páginas compostas só de blocos (grades, galerias):
+   copiar este padrão em vez de inventar um grid novo (R1).
+   ========================================================================== */
+.app--mosaic {
+    grid-template-rows: none; /* linhas implícitas, sob demanda */
+}
+
+/* Wrapper semântico (header/main/nav): sai do layout, filhos vão pro grid. */
+.mosaic-region {
+    display: contents;
+}
+
+/* Bloco quadrado do mosaico: mesma mecânica das outras células (aspect-ratio
+   deriva a altura da largura da coluna). Divisórias declaradas UMA vez por
+   aresta: cada célula desenha direita+baixo — INCLUSIVE a última coluna e a
+   última linha (sem moldura no .app, a célula de extremidade fecha a própria
+   aresta externa). Esquerda/topo do perímetro: bloco consolidado abaixo. */
+.mosaic-cell {
+    display: grid;
+    place-items: center;
+    aspect-ratio: 1 / 1;
+    border-right: var(--hair) solid var(--color-line);
+    border-bottom: var(--hair) solid var(--color-line);
+}
+
+/* ============================================================================
+   BORDAS DE LINHA E PERÍMETRO (R4) — bloco consolidado, DELIBERADAMENTE no
+   fim do arquivo: na mesma especificidade, o cascade garante que estas regras
+   vençam resets de componente (ex.: `.btn { border: none }`).
+
+   Regra do DS: o `.app` NÃO tem moldura própria. Cada aresta pertence a UM
+   único elemento:
+   • divisória vertical   → elemento à ESQUERDA declara border-right;
+   • divisória horizontal → elemento ACIMA declara border-bottom;
+   • PERÍMETRO            → a própria célula de extremidade fecha sua aresta
+     externa (primeira linha: border-top; primeira coluna: border-left;
+     última coluna: border-right; última linha: border-bottom) — as linhas
+     da grade encostam nas extremidades da tela.
+   AO CRIAR UMA NOVA SEÇÃO: adicionar aqui o border-bottom da fileira e as
+   arestas de perímetro das células das colunas 1 e 6.
+   ========================================================================== */
+
+/* Fileiras do index.html: cada linha desenha sua base (horizontal). */
+.header > *,
+.post-header > *,
+.post-title,
+.bottom-nav > * {
+    border-bottom: var(--hair) solid var(--color-line);
+}
+
+/* Separação post-body ↔ rodapé: o rodapé declara o topo porque o post-body
+   (1fr, cresce) é quem está acima mas não "possui" essa aresta fixa. */
+.bottom-nav > * {
+    border-top: var(--hair) solid var(--color-line);
+}
+
+/* Perímetro — topo (primeira linha da página). */
+.header > *,
+.app--mosaic .mosaic-region:first-child > .mosaic-cell:nth-child(-n + 6) {
+    border-top: var(--hair) solid var(--color-line);
+}
+
+/* Perímetro — esquerda (células da coluna 1). */
+.brand,
+.post-avatar,
+.post-title,
+.post-body,
+.bottom-nav > *:first-child,
+.mosaic-cell:nth-child(6n + 1) {
+    border-left: var(--hair) solid var(--color-line);
+}
+
+/* Perímetro — direita (células da coluna 6; .nav-btn e .mosaic-cell já
+   declaram border-right no próprio componente). */
+.header > *:last-child,
+.post-header > *:last-child,
+.post-title,
+.post-body {
+    border-right: var(--hair) solid var(--color-line);
+}
